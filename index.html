@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL图片查看器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#36CFC9',
+                        accent: '#FF7D00',
+                        neutral: '#F5F7FA',
+                        dark: '#1D2129',
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .text-shadow {
+                text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .transition-custom {
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .hover-scale {
+                @apply hover:scale-105 transition-all duration-300;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-inter text-dark min-h-screen flex flex-col">
+<!-- 顶部导航栏 -->
+<header class="bg-white shadow-sm sticky top-0 z-50 transition-all duration-300" id="navbar">
+    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+            <i class="fa fa-picture-o text-primary text-2xl"></i>
+            <h1 class="text-xl font-bold text-dark">WebGL<span class="text-primary">图片查看器</span></h1>
+        </div>
+        <nav class="hidden md:flex space-x-6">
+            <a href="#" class="text-gray-600 hover:text-primary transition-colors">首页</a>
+            <a href="#" class="text-gray-600 hover:text-primary transition-colors">关于</a>
+            <a href="#" class="text-gray-600 hover:text-primary transition-colors">文档</a>
+        </nav>
+        <button class="md:hidden text-gray-600 focus:outline-none" id="menuToggle">
+            <i class="fa fa-bars text-xl"></i>
+        </button>
+    </div>
+    <!-- 移动端菜单 -->
+    <div class="md:hidden hidden bg-white shadow-lg absolute w-full" id="mobileMenu">
+        <div class="container mx-auto px-4 py-3 flex flex-col space-y-3">
+            <a href="#" class="text-gray-600 hover:text-primary py-2 border-b border-gray-100">首页</a>
+            <a href="#" class="text-gray-600 hover:text-primary py-2 border-b border-gray-100">关于</a>
+            <a href="#" class="text-gray-600 hover:text-primary py-2">文档</a>
+        </div>
+    </div>
+</header>
+
+<!-- 主要内容区 -->
+<main class="flex-grow container mx-auto px-4 py-8">
+    <!-- 图片上传区 -->
+    <section class="bg-white rounded-xl shadow-md p-6 mb-8 transform hover:shadow-lg transition-all duration-300">
+        <h2 class="text-2xl font-bold mb-4 flex items-center">
+            <i class="fa fa-cloud-upload text-primary mr-2"></i>上传图片
+        </h2>
+        <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary transition-all duration-300" id="dropZone">
+            <input type="file" id="fileInput" class="hidden" accept="image/*">
+            <i class="fa fa-picture-o text-4xl text-gray-400 mb-4"></i>
+            <p class="text-gray-600 mb-4">拖放图片到这里，或者</p>
+            <button class="bg-primary hover:bg-primary/90 text-white font-medium py-2 px-6 rounded-lg transition-all duration-300 hover-scale">
+                <i class="fa fa-folder-open mr-2"></i>选择图片
+            </button>
+            <p class="text-xs text-gray-500 mt-4">支持 JPG, PNG, GIF 等格式</p>
+        </div>
+    </section>
+
+    <!-- 图片预览区 -->
+    <section class="bg-white rounded-xl shadow-md p-6 mb-8 transform hover:shadow-lg transition-all duration-300">
+        <h2 class="text-2xl font-bold mb-4 flex items-center">
+            <i class="fa fa-eye text-primary mr-2"></i>WebGL 预览
+        </h2>
+        <div class="relative bg-gray-100 rounded-lg overflow-hidden" id="previewContainer">
+            <canvas id="glCanvas" class="w-full h-auto bg-gray-100" style="min-height: 400px;"></canvas>
+
+            <!-- 加载状态 -->
+            <div id="loadingIndicator" class="absolute inset-0 flex items-center justify-center bg-gray-100/80 opacity-0 pointer-events-none transition-opacity duration-300">
+                <div class="flex flex-col items-center">
+                    <div class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p class="text-gray-600">正在加载图片...</p>
+                </div>
+            </div>
+
+            <!-- 无图片提示 -->
+            <div id="noImageMessage" class="absolute inset-0 flex flex-col items-center justify-center">
+                <i class="fa fa-image text-5xl text-gray-300 mb-4"></i>
+                <p class="text-gray-500">请上传一张图片以在 WebGL 中显示</p>
+            </div>
+        </div>
+
+        <!-- 图片信息 -->
+        <div id="imageInfo" class="mt-4 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-gray-50 p-3 rounded-lg">
+                    <p class="text-sm text-gray-500">文件名</p>
+                    <p id="fileName" class="font-medium"></p>
+                </div>
+                <div class="bg-gray-50 p-3 rounded-lg">
+                    <p class="text-sm text-gray-500">尺寸</p>
+                    <p id="imageSize" class="font-medium"></p>
+                </div>
+                <div class="bg-gray-50 p-3 rounded-lg">
+                    <p class="text-sm text-gray-500">格式</p>
+                    <p id="imageFormat" class="font-medium"></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 功能控制区 -->
+    <section class="bg-white rounded-xl shadow-md p-6 transform hover:shadow-lg transition-all duration-300">
+        <h2 class="text-2xl font-bold mb-4 flex items-center">
+            <i class="fa fa-sliders text-primary mr-2"></i>图片控制
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h3 class="text-lg font-medium mb-3">变换</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">旋转</label>
+                        <input type="range" id="rotation" min="0" max="360" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary">
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>0°</span>
+                            <span id="rotationValue">0°</span>
+                            <span>360°</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">缩放</label>
+                        <input type="range" id="scale" min="0.1" max="3" step="0.1" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary">
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>0.1x</span>
+                            <span id="scaleValue">1.0x</span>
+                            <span>3.0x</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <h3 class="text-lg font-medium mb-3">效果</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">亮度</label>
+                        <input type="range" id="brightness" min="0" max="2" step="0.05" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary">
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>暗</span>
+                            <span id="brightnessValue">1.0</span>
+                            <span>亮</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">对比度</label>
+                        <input type="range" id="contrast" min="0" max="2" step="0.05" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary">
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>低</span>
+                            <span id="contrastValue">1.0</span>
+                            <span>高</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="mt-6 flex justify-end space-x-3">
+            <button id="resetBtn" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-all duration-300">
+                <i class="fa fa-refresh mr-2"></i>重置
+            </button>
+            <button id="downloadBtn" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-all duration-300 hover-scale">
+                <i class="fa fa-download mr-2"></i>下载处理后的图片
+            </button>
+        </div>
+    </section>
+</main>
+
+<!-- 页脚 -->
+<footer class="bg-dark text-white py-8">
+    <div class="container mx-auto px-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div>
+                <h3 class="text-lg font-bold mb-4">WebGL图片查看器</h3>
+                <p class="text-gray-400">使用WebGL技术高效加载和处理图片的现代应用</p>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold mb-4">功能</h3>
+                <ul class="space-y-2 text-gray-400">
+                    <li><i class="fa fa-check-circle text-primary mr-2"></i>WebGL加速渲染</li>
+                    <li><i class="fa fa-check-circle text-primary mr-2"></i>图片变换与调整</li>
+                    <li><i class="fa fa-check-circle text-primary mr-2"></i>高性能图像处理</li>
+                    <li><i class="fa fa-check-circle text-primary mr-2"></i>响应式界面设计</li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold mb-4">联系我们</h3>
+                <div class="flex space-x-4">
+                    <a href="#" class="text-gray-400 hover:text-primary transition-colors">
+                        <i class="fa fa-github text-xl"></i>
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-primary transition-colors">
+                        <i class="fa fa-twitter text-xl"></i>
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-primary transition-colors">
+                        <i class="fa fa-envelope text-xl"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="border-t border-gray-800 mt-8 pt-8 text-center text-gray-500">
+            <p>&copy; 2025 WebGL图片查看器. 保留所有权利.</p>
+        </div>
+    </div>
+</footer>
+
+<script src="js/webgl.js"></script>
+</body>
+</html>
